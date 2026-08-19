@@ -1,4 +1,4 @@
-// Web Audio API Sound Engine for Timberjack Game
+// Web Audio API Sound Engine for 20s Chopping Frenzy Game
 class SoundEngine {
   constructor() {
     this.ctx = null;
@@ -33,41 +33,32 @@ class SoundEngine {
     return this.muted;
   }
 
-  playChop(side = 'LEFT', combo = 0) {
+  playChop(fever = false, cps = 0) {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
 
     const t = this.ctx.currentTime;
-    const baseFreq = 160 + Math.min(combo * 4, 120);
+    const baseFreq = (fever ? 280 : 180) + Math.min(cps * 8, 140);
 
     // 1. Thud oscillator (wooden impact)
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
-    osc.type = 'triangle';
+    osc.type = fever ? 'sawtooth' : 'triangle';
     osc.frequency.setValueAtTime(baseFreq, t);
-    osc.frequency.exponentialRampToValueAtTime(45, t + 0.08);
+    osc.frequency.exponentialRampToValueAtTime(50, t + 0.08);
 
-    gain.gain.setValueAtTime(0.7, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
-
-    // Stereo Panning
-    let dest = gain;
-    if (this.ctx.createStereoPanner) {
-      const panner = this.ctx.createStereoPanner();
-      panner.pan.setValueAtTime(side === 'LEFT' ? -0.4 : 0.4, t);
-      gain.connect(panner);
-      dest = panner;
-    }
+    gain.gain.setValueAtTime(fever ? 0.8 : 0.65, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
 
     osc.connect(gain);
-    dest.connect(this.ctx.destination);
+    gain.connect(this.ctx.destination);
 
     osc.start(t);
-    osc.stop(t + 0.1);
+    osc.stop(t + 0.09);
 
-    // 2. Crackle noise burst (sawdust & wood snap)
+    // 2. Crackle noise burst (sawdust & sharp slice)
     const bufferSize = Math.floor(this.ctx.sampleRate * 0.04);
     const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
@@ -80,10 +71,10 @@ class SoundEngine {
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'highpass';
-    filter.frequency.setValueAtTime(800, t);
+    filter.frequency.setValueAtTime(fever ? 1200 : 900, t);
 
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.35, t);
+    noiseGain.gain.setValueAtTime(fever ? 0.5 : 0.35, t);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
 
     whiteNoise.connect(filter);
@@ -93,93 +84,97 @@ class SoundEngine {
     whiteNoise.start(t);
   }
 
-  playBranchHit() {
+  playLogShatter() {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
 
     const t = this.ctx.currentTime;
-    
-    // Low heavy thud
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.2);
+
+    gain.gain.setValueAtTime(0.7, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.22);
+  }
+
+  playTick(pitch = 880) {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(pitch, t);
+
+    gain.gain.setValueAtTime(0.4, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + 0.06);
+  }
+
+  playFeverStart() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const notes = [440, 554.37, 659.25, 880];
+    notes.forEach((freq, idx) => {
+      const t = this.ctx.currentTime + idx * 0.06;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.2);
+    });
+  }
+
+  playTimeUp() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
     osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(120, t);
-    osc.frequency.exponentialRampToValueAtTime(30, t + 0.35);
+    osc.frequency.setValueAtTime(440, t);
+    osc.frequency.exponentialRampToValueAtTime(110, t + 0.5);
 
     gain.gain.setValueAtTime(0.8, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
 
     osc.connect(gain);
     gain.connect(this.ctx.destination);
 
     osc.start(t);
-    osc.stop(t + 0.36);
-
-    // Crunch noise
-    const bufferSize = Math.floor(this.ctx.sampleRate * 0.15);
-    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
-    }
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = noiseBuffer;
-    const nGain = this.ctx.createGain();
-    nGain.gain.setValueAtTime(0.5, t);
-    nGain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
-
-    noise.connect(nGain);
-    nGain.connect(this.ctx.destination);
-    noise.start(t);
-  }
-
-  playTimeout() {
-    if (this.muted) return;
-    this.init();
-    if (!this.ctx) return;
-
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(350, t);
-    osc.frequency.exponentialRampToValueAtTime(90, t + 0.4);
-
-    gain.gain.setValueAtTime(0.6, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    osc.start(t);
-    osc.stop(t + 0.42);
-  }
-
-  playCombo(level = 1) {
-    if (this.muted) return;
-    this.init();
-    if (!this.ctx) return;
-
-    const notes = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50];
-    const freq = notes[Math.min(level - 1, notes.length - 1)];
-
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, t);
-
-    gain.gain.setValueAtTime(0.3, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    osc.start(t);
-    osc.stop(t + 0.26);
+    osc.stop(t + 0.52);
   }
 
   playNewRecord() {
@@ -189,7 +184,7 @@ class SoundEngine {
 
     const notes = [523.25, 659.25, 783.99, 1046.50];
     notes.forEach((freq, idx) => {
-      const t = this.ctx.currentTime + idx * 0.1;
+      const t = this.ctx.currentTime + idx * 0.09;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
 

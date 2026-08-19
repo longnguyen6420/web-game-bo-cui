@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Bổ Củi Siêu Tốc - Timberjack Web Game</title>
+  <title>Bổ Củi Siêu Tốc - Thử Thách 20 Giây</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700;800&family=Nunito:wght@700;900&display=swap" rel="stylesheet">
@@ -14,21 +14,36 @@
     <!-- Canvas Game -->
     <canvas id="gameCanvas"></canvas>
 
-    <!-- HUD -->
+    <!-- Giao diện HUD 20 giây -->
     <div id="hud" class="hud hidden">
-      <div class="time-bar-container">
-        <div class="time-bar-wrapper">
-          <div id="time-bar" class="time-bar-fill"></div>
+      <!-- Top Bar: Timer & Score -->
+      <div class="hud-top">
+        <div class="timer-card" id="timer-card">
+          <div class="timer-label">THỜI GIAN</div>
+          <div class="timer-val" id="timer-val">20.00s</div>
+        </div>
+
+        <div class="pieces-card">
+          <div class="pieces-label">SỐ MẢNH CỦI</div>
+          <div class="pieces-val" id="pieces-val">0</div>
+        </div>
+
+        <div class="cps-card">
+          <div class="cps-label">TỐC ĐỘ (CPS)</div>
+          <div class="cps-val" id="cps-val">0.0</div>
         </div>
       </div>
 
-      <div class="score-display">
-        <div id="current-score" class="score-num">0</div>
-        <div id="combo-badge" class="combo-badge hidden">COMBO <span id="combo-num">0</span>x</div>
+      <!-- Thanh Fever Mode (Cuồng Nộ) -->
+      <div class="fever-container">
+        <div class="fever-label" id="fever-label">⚡ CUỒNG NỘ (FEVER)</div>
+        <div class="fever-bar-wrapper">
+          <div class="fever-bar-fill" id="fever-bar"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Start Screen -->
+    <!-- Màn hình Bắt đầu (Start Screen) -->
     <div id="start-screen" class="overlay-screen">
       <div class="menu-card">
         <div class="game-logo">
@@ -36,76 +51,76 @@
             <span class="logo-icon">🪓</span>
             <span class="logo-wood">🪵</span>
           </div>
-          <h1 class="logo-title">BỔ CỦI<br><span class="highlight">SIÊU TỐC</span></h1>
-          <p class="logo-subtitle">Chặt gỗ liên hoàn • Né cành siêu tốc!</p>
+          <h1 class="logo-title">BỔ CỦI<br><span class="highlight">20 GIÂY SIÊU TỐC</span></h1>
+          <p class="logo-subtitle">Chặt khúc củi xoay tròn thành nhiều mảnh nhất!</p>
         </div>
 
-        <!-- Skin Selector -->
+        <!-- Chọn Vũ khí / Skin -->
         <div class="skin-selector-section">
-          <div class="section-title">CHỌN NHÂN VẬT</div>
+          <div class="section-title">CHỌN VŨ KHÍ</div>
           <div class="skin-list" id="skin-list">
-            <button class="skin-btn active" data-skin="lumberjack" title="Tiều Phu Cổ Điển">
-              <span class="skin-avatar">🧔</span>
-              <span class="skin-name">Tiều Phu</span>
+            <button class="skin-btn active" data-skin="lumberjack" title="Rìu Tiều Phu">
+              <span class="skin-avatar">🪓</span>
+              <span class="skin-name">Rìu Gỗ</span>
             </button>
-            <button class="skin-btn" data-skin="ninja" title="Ninja Siêu Tốc">
-              <span class="skin-avatar">🥷</span>
-              <span class="skin-name">Ninja</span>
+            <button class="skin-btn" data-skin="ninja" title="Kiếm Katana">
+              <span class="skin-avatar">🗡️</span>
+              <span class="skin-name">Katana</span>
             </button>
-            <button class="skin-btn" data-skin="knight" title="Hiệp Sĩ Rừng Xanh">
+            <button class="skin-btn" data-skin="knight" title="Rìu Chiến Hiệp Sĩ">
               <span class="skin-avatar">🛡️</span>
-              <span class="skin-name">Hiệp Sĩ</span>
+              <span class="skin-name">Rìu Chiến</span>
             </button>
-            <button class="skin-btn" data-skin="robot" title="Rô-bốt Laser">
-              <span class="skin-avatar">🤖</span>
-              <span class="skin-name">Rô-bốt</span>
+            <button class="skin-btn" data-skin="robot" title="Rìu Plasma Laser">
+              <span class="skin-avatar">⚡</span>
+              <span class="skin-name">Laser</span>
             </button>
           </div>
         </div>
 
-        <!-- Guide -->
+        <!-- Hướng dẫn chơi -->
         <div class="guide-box">
           <div class="guide-item">
-            <span class="key-badge">⬅ Phím Trái / A</span>
-            <span class="guide-text">Bổ củi bên <b>TRÁI</b></span>
+            <span class="key-badge">🖱️ Chuột / Phím Space / Chạm</span>
+            <span class="guide-text">Bấm <b>càng nhanh càng tốt</b></span>
           </div>
           <div class="guide-item">
-            <span class="key-badge">Phím Phải / D ➡</span>
-            <span class="guide-text">Bổ củi bên <b>PHẢI</b></span>
-          </div>
-          <div class="guide-item mobile-hint">
-            <span class="tap-badge">👆 Cảm ứng</span>
-            <span class="guide-text">Chạm nửa <b>TRÁI / PHẢI</b> màn hình</span>
+            <span class="key-badge">⏳ Giới hạn 20 giây</span>
+            <span class="guide-text">Tích luỹ <b>Fever Mode</b> x2 mảnh</span>
           </div>
         </div>
 
         <button id="btn-start" class="btn-primary pulse-anim">
-          <span class="btn-icon">▶</span> BẮT ĐẦU CHƠI
+          <span class="btn-icon">▶</span> BẮT ĐẦU (20s)
         </button>
 
         <div class="high-score-record">
-          🏆 Kỷ lục: <span id="menu-high-score">0</span>
+          🏆 Kỷ lục: <span id="menu-high-score">0</span> mảnh
         </div>
       </div>
     </div>
 
-    <!-- Game Over Screen -->
+    <!-- Màn hình Kết Thúc 20 Giây -->
     <div id="gameover-screen" class="overlay-screen hidden">
       <div class="menu-card gameover-card">
         <div class="gameover-header">
-          <div id="gameover-icon" class="gameover-icon">💥</div>
-          <h2 id="gameover-title" class="gameover-title">THUA CUỘC!</h2>
-          <p id="gameover-reason" class="gameover-reason">Bạn đã bị cành cây va trúng đầu!</p>
+          <div class="gameover-icon">⏱️</div>
+          <h2 class="gameover-title">HẾT GIỜ (20s)!</h2>
+          <p class="gameover-reason">Bạn đã hoàn thành thử thách bổ củi!</p>
         </div>
 
         <div class="score-summary">
           <div class="score-row">
-            <span class="label">Điểm đạt được:</span>
-            <span id="final-score" class="val highlight">0</span>
+            <span class="label">Tổng số mảnh củi:</span>
+            <span id="final-pieces" class="val highlight">0</span>
           </div>
           <div class="score-row">
-            <span class="label">Combo cao nhất:</span>
-            <span id="final-max-combo" class="val">0</span>
+            <span class="label">Tốc độ bổ cao nhất:</span>
+            <span id="final-max-cps" class="val">0.0 CPS</span>
+          </div>
+          <div class="score-row">
+            <span class="label">Số khúc gỗ đã phá:</span>
+            <span id="final-logs-broken" class="val">0</span>
           </div>
           <div class="score-row">
             <span class="label">Kỷ lục cao nhất:</span>
@@ -118,12 +133,12 @@
 
         <div class="rank-box">
           <div class="rank-label">DANH HIỆU ĐẠT ĐƯỢC</div>
-          <div id="rank-title" class="rank-title">🪵 Tập Sự Bổ Củi</div>
+          <div id="rank-title" class="rank-title">🪵 Thợ Đốn Củi Mới Vào Nghề</div>
         </div>
 
         <div class="gameover-actions">
           <button id="btn-restart" class="btn-primary pulse-anim">
-            <span class="btn-icon">🔄</span> CHƠI LẠI
+            <span class="btn-icon">🔄</span> CHƠI LẠI (20s)
           </button>
           <button id="btn-menu" class="btn-secondary">
             <span class="btn-icon">🏠</span> MENU CHÍNH
@@ -132,19 +147,15 @@
       </div>
     </div>
 
-    <!-- Mobile Touch Controls -->
-    <div id="touch-controls" class="touch-controls hidden">
-      <button id="touch-left" class="touch-btn left" aria-label="Chặt Trái">
-        <span class="touch-icon">◀</span>
-        <span class="touch-label">TRÁI</span>
-      </button>
-      <button id="touch-right" class="touch-btn right" aria-label="Chặt Phải">
-        <span class="touch-icon">▶</span>
-        <span class="touch-label">PHẢI</span>
+    <!-- Nút Bổ Củi Lớn cho Mobile (Chạm Nhanh) -->
+    <div id="mobile-tap-area" class="mobile-tap-area hidden">
+      <button id="btn-chop-mobile" class="btn-chop-mobile" aria-label="Bổ củi">
+        <span class="chop-icon">🪓</span>
+        <span class="chop-text">CHẶT CỦI!</span>
       </button>
     </div>
 
-    <!-- Sound Toggle Button -->
+    <!-- Nút Bật/Tắt Âm Thanh -->
     <button id="btn-sound" class="sound-toggle-btn" aria-label="Bật/Tắt âm thanh">
       <span id="sound-icon">🔊</span>
     </button>
