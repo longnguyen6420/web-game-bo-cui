@@ -1,5 +1,25 @@
 // --- B·ªï C·ªßi Si√™u T·ªëc - Core Game Engine ---
 
+// Polyfill roundRect for maximum browser compatibility
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (typeof r === 'undefined') r = 0;
+    if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+    this.beginPath();
+    this.moveTo(x + r.tl, y);
+    this.lineTo(x + w - r.tr, y);
+    this.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+    this.lineTo(x + w, y + h - r.br);
+    this.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+    this.lineTo(x + r.bl, y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+    this.lineTo(x, y + r.tl);
+    this.quadraticCurveTo(x, y, x + r.tl, y);
+    this.closePath();
+    return this;
+  };
+}
+
 // DOM Elements
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -55,13 +75,13 @@ let dpr = window.devicePixelRatio || 1;
 let shakeIntensity = 0;
 
 // Dimensions & Positions
-const TRUNK_WIDTG = 96;
+const TRUNK_WIDTH = 96;
 const TRUNK_HEIGHT = 74;
 let trunkBaseX = 240;
 let trunkBaseY = 640;
 
 // Tree Branches Data
-const BRANCH {
+const BRANCH = {
   NONE: 'NONE',
   LEFT: 'LEFT',
   RIGHT: 'RIGHT'
@@ -88,7 +108,7 @@ let clouds = [];
 
 // Sound state update
 function updateSoundIcon() {
-  soundIcon.textContent = sounds.isMuted() ? 'üî©' : 'üî©';
+  soundIcon.textContent = sounds.isMuted() ? 'üîá' : 'üîä';
 }
 updateSoundIcon();
 
@@ -103,8 +123,8 @@ function resizeCanvas() {
   const container = document.getElementById('game-container');
   const rect = container.getBoundingClientRect();
   
-  viewWidth = rect.width;
-  viewHeight = rect.height;
+  viewWidth = rect.width || 480;
+  viewHeight = rect.height || 800;
   dpr = window.devicePixelRatio || 1;
 
   canvas.width = Math.floor(viewWidth * dpr);
@@ -144,7 +164,169 @@ function initEnvironment() {
   }
 }
 initEnvironment();
-// --- Rendering Functions ---
+
+// Rank & Medal Calculation
+function calculateRank(s) {
+  if (s >= 200) return 'üëë Th√°nh B·ªï C·ªßi V√¥ ƒê·ªãch';
+  if (s >= 100) return '‚ö° Cao Th·ªß Ch√©m C·ªßi';
+  if (s >= 50) return 'üå≤ Th·ª£ R·ª´ng Chuy√™n Nghi·ªáp';
+  if (s >= 20) return 'ü™ì Ti·ªÅu Phu Nhanh Nh·∫πn';
+  return 'ü™µ T·∫≠p S·ª± B·ªï C·ªßi';
+}
+
+// Generate the Next Random Trunk Segment
+let lastBranch = BRANCH.NONE;
+function generateNextBranch() {
+  const rand = Math.random();
+  if (lastBranch === BRANCH.NONE) {
+    if (rand < 0.42) {
+      lastBranch = BRANCH.LEFT;
+    } else if (rand < 0.84) {
+      lastBranch = BRANCH.RIGHT;
+    } else {
+      lastBranch = BRANCH.NONE;
+    }
+  } else {
+    // If previous was a branch, 50% chance of empty for fair reaction time
+    if (rand < 0.5) {
+      lastBranch = BRANCH.NONE;
+    } else {
+      lastBranch = Math.random() < 0.5 ? BRANCH.LEFT : BRANCH.RIGHT;
+    }
+  }
+  return lastBranch;
+}
+
+function initTree() {
+  treeSegments = [];
+  lastBranch = BRANCH.NONE;
+  // First 4 segments are empty for safe starting
+  for (let i = 0; i < 4; i++) {
+    treeSegments.push(BRANCH.NONE);
+  }
+  // Remaining segments have branches
+  for (let i = 4; i < TOTAL_SEGMENTS; i++) {
+    treeSegments.push(generateNextBranch());
+  }
+}
+
+// Particle System Classes
+class FlyingLog {
+  constructor(x, y, side) {
+    this.x = x;
+    this.y = y;
+    this.vx = side === 'LEFT' ? -12 - Math.random() * 5 : 12 + Math.random() * 5;
+    this.vy = -10 - Math.random() * 4;
+    this.rotation = 0;
+    this.rotationSpeed = (side === 'LEFT' ? -1 : 1) * (0.2 + Math.random() * 0.15);
+    this.gravity = 0.7;
+    this.opacity = 1;
+    this.life = 0;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += this.gravity;
+    this.rotation += this.rotationSpeed;
+    this.life++;
+    if (this.life > 40) {
+      this.opacity -= 0.05;
+    }
+  }
+  draw() {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, this.opacity);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    drawTrunkSegment(0, -TRUNK_HEIGHT / 2, BRANCH.NONE);
+    ctx.restore();
+  }
+}
+
+class WoodChip {
+  constructor(x, y, side) {
+    this.x = x;
+    this.y = y;
+    const angle = side === 'LEFT' ? Math.PI * 0.75 + (Math.random() - 0.5) : Math.PI * 0.25 + (Math.random() - 0.5);
+    const speed = 4 + Math.random() * 10;
+    this.vx = Math.cos(angle) * speed;
+    this.vy = -Math.sin(angle) * speed - 2;
+    this.size = 3 + Math.random() * 5;
+    this.color = ['#854d0e', '#a16207', '#ca8a04', '#fed7aa'][Math.floor(Math.random() * 4)];
+    this.gravity = 0.5;
+    this.life = 0;
+    this.maxLife = 25 + Math.random() * 15;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += this.gravity;
+    this.life++;
+  }
+  draw() {
+    const alpha = 1 - this.life / this.maxLife;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, this.size, this.size);
+    ctx.restore();
+  }
+}
+
+class SlashArc {
+  constructor(x, y, side) {
+    this.x = x;
+    this.y = y;
+    this.side = side;
+    this.life = 0;
+    this.maxLife = 10;
+  }
+  update() {
+    this.life++;
+  }
+  draw() {
+    const progress = this.life / this.maxLife;
+    ctx.save();
+    ctx.globalAlpha = 1 - progress;
+    ctx.strokeStyle = activeSkin === 'ninja' ? '#38bdf8' : (activeSkin === 'robot' ? '#06b6d4' : '#ffffff');
+    ctx.lineWidth = 4 * (1 - progress);
+    ctx.shadowColor = ctx.strokeStyle;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    const dir = this.side === 'LEFT' ? 1 : -1;
+    ctx.arc(this.x, this.y, 45, -Math.PI * 0.3 * dir, Math.PI * 0.4 * dir);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+class FloatingText {
+  constructor(text, x, y, color = '#fbbf24', fontSize = 24) {
+    this.text = text;
+    this.x = x;
+    this.y = y;
+    this.color = color;
+    this.fontSize = fontSize;
+    this.life = 0;
+    this.maxLife = 30;
+  }
+  update() {
+    this.y -= 1.4;
+    this.life++;
+  }
+  draw() {
+    const progress = this.life / this.maxLife;
+    ctx.save();
+    ctx.globalAlpha = 1 - progress;
+    ctx.font = `800 ${this.fontSize}px var(--font-main)`;
+    ctx.fillStyle = this.color;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 6;
+    ctx.fillText(this.text, this.x, this.y);
+    ctx.restore();
+  }
+}
 
 // Draw Environment & Background
 function drawBackground() {
@@ -213,7 +395,7 @@ function drawBackground() {
     ctx.fill();
   });
 
-  // 5. Floating Autumn/Forest Leaves
+  // 5. Floating Leaves
   floatingLeaves.forEach(leaf => {
     ctx.save();
     ctx.translate(leaf.x, leaf.y);
@@ -244,571 +426,409 @@ function drawBackground() {
   ctx.beginPath();
   ctx.ellipse(trunkBaseX, trunkBaseY + 36, TRUNK_WIDTH * 0.65, 20, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctw.fillStyle = '#92400e';
+  ctx.fillStyle = '#92400e';
   ctx.beginPath();
-  ctx.ellipse(trunkBaseX, trunkBaseY + 34, TRUNK_WIDTH< * 0.58, 16, 0, 0, Math.PI * 2);
+  ctx.ellipse(trunkBaseX, trunkBaseY + 34, TRUNK_WIDTH * 0.58, 16, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctw.fillStyle = '#b45309';
+  ctx.fillStyle = '#b45309';
   ctx.beginPath();
-  ctx.ellipse(trunkBaseX, trunkBaseY + 33, TRUNK_WIDTH< * 0.45, 12, 0, 0, Math.PI * 2);
+  ctx.ellipse(trunkBaseX, trunkBaseY + 33, TRUNK_WIDTH * 0.45, 12, 0, 0, Math.PI * 2);
   ctx.fill();
 }
 
 // Draw a Single Trunk Segment with Branch
-function drawTrunö‘ŸY€Y[ù
-ﬁﬁKúò[ò⁄\JH¬à€€ú›[ï»HïSí◊’“Q»é¬à€€ú›HïSí◊“RQ“¬ÇàÀ»Kàò]»úò[ò⁄ö\ú›
-Yà[ûJBàYà
-úò[ò⁄\HOOHîêSê“ìQï
-H¬àò]–úò[ò⁄
-ﬁH[ïÀﬁH
-»
-àçK	”Qï	 N¬àH[ŸHYà
-úò[ò⁄\HOOHîêSê“îíQ“
-H¬àò]–úò[ò⁄
-ﬁ
-»[ïÀﬁH
-»
-àçK	‘íQ“	 N¬àBÇàÀ»ãàù[ö»õŸH
-ﬁ[[ôöXÿ[Ÿ»YXŸJBà›úÿ]ôJ
-N¬à›ùò[ú€]JﬁﬁJN¬ÇàÀ»›]\àò\ö¬à€€ú›Ÿ—‹òYH›ò‹ôX]S[ôX\ë‹òYY[ù
-Z[ïÀ[ïÀ
-N¬àŸ—‹òYòY€€‹î›‹
-	»ÕXåçåI N¬àŸ—‹òYòY€€‹î›‹
-åN	»ŒMI N¬àŸ—‹òYòY€€‹î›‹
-çK	»ÿLMåå… N¬àŸ—‹òYòY€€‹î›‹
-éã	»ŒMI N¬àŸ—‹òYòY€€‹î›‹
-K	»ÕXåçåI N¬Çà›ôö[›[HHŸ—‹òY¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-Z[ïÀïSí◊’“Q
-N¬à›ôö[
-
-N¬ÇàÀ»ò\ö»ô\ùXÿ[[ô\»»‹òZ[Çà›ú›õ⁄ŸT›[HH	‹ôÿòJéKçãÀçJIŒ¬à›õ[ôU⁄YHŒ¬à›òôY⁄[î]
-
-N¬à›õ[›ôU Z[ï»
-àçK
-N¬à›õ[ôU Z[ï»
-àçMKH
-N¬à›õ[›ôU [ï»
-àåÕK
-N¬à›õ[ôU [ï»
-àåÀH
-N¬à›ú›õ⁄ŸJ
-N¬ÇàÀ»ŸY€Y[ù›]YŸHö[ô¬à›ôö[›[HH	‹ôÿòJçMçLŒåÕJIŒ¬à›òôY⁄[î]
-
-N¬à›ô[\ŸJã[ï»HãX]îH
-àäN¬à›ôö[
-
-N¬Çà›úô\›‹ôJ
-N¬üBÇãÀ»ò]»Húò[ò⁄⁄]\⁄õ€XYŸBôù[ò›[€àò]–úò[ò⁄
-›\ù›\ùK⁄YJH¬à›úÿ]ôJ
-N¬à€€ú›\àH⁄YHOOH	”Qï	»»LHàN¬à€€ú›úò[ò⁄[àHLé¬ÇàÀ»€€Ÿ[à[XÇà›ôö[›[HH	»ÕŒÕLâŒ¬à›òôY⁄[î]
-
-N¬à›õ[›ôU ›\ù›\ùHHLäN¬à›ú]XYò]X–›\ùôU ›\ù
-»\à
-à
-úò[ò⁄[à
-àçJK›\ùHHN›\ù
-»\à
-àúò[ò⁄[ã›\ùHHL
-N¬à›õ[ôU ›\ù
-»\à
-àúò[ò⁄[ã›\ùH
-»
-N¬à›ú]XYò]X–›\ùôU ›\ù
-»\à
-à
-úò[ò⁄[à
-àçJK›\ùH
-»Lã›\ù›\ùH
-»LäN¬à›ò€‹ŸT]
-
-N¬à›ôö[
-
-N¬ÇàÀ»õ€XYŸH»[ôHôYYHYôú¬à€€ú›\H›\ù
-»\à
-à
-úò[ò⁄[à
-àéMJN¬à€€ú›\HH›\ùHHé¬Çà€€ú›XYê€€‹ú»H…»ÃMLÃô	À	»ÃMççLÕ	À	»ÃMNŸ	À	»ÃåòÕMYI◊N¬ààÀ»€\›\àŸà»XYàYôú¬à¬à»ﬁàﬁNàNéàçŒàXYê€€‹ú÷ÃWHKà»ﬁà\à
-àNﬁNàãéàåŒàXYê€€‹ú÷ÃóHKà»ﬁàY\à
-àMãﬁNàLMéàNŒàXYê€€‹ú÷Ã◊HBàKôõ‹ëXX⁄
-Oà¬à›Àôö[›[HHòŒ¬à›òôY⁄[î]
-
-N¬à›ò\ò \
-»õﬁ\H
-»õﬁKúãX]îH
-àäN¬à›ôö[
-
-N¬àJN¬Çà›úô\›‹ôJ
-N¬üBÇãÀ»ò]»^Y\à⁄\òX›\àXÿ€‹ô[ô»»Ÿ[X›Y⁄⁄[Çôù[ò›[€àò]‘^Y\äK⁄YK›]K›⁄[ô‘õŸ‹ô\‹ H¬à›úÿ]ôJ
-N¬à›ùò[ú€]JJN¬ààÀ»õ\⁄\òX›\à‹ö^õ€ù[HYà€àíQ“⁄YBàYà
-⁄YHOOH	‘íQ“	 H¬à›úÿÿ[JLKJN¬àBÇàÀ»YHúôX]õÿòö[ô¬à]õÿñHH¬àYà
-›]HOOH	“QI H¬àõÿñHHX]ú⁄[ä^Y\ãöYU[YH
-àå
-H
-àãçN¬àBÇàYà
-X›]ôT⁄⁄[àOOH	€ö[öòI H¬àò]”ö[öòJõÿñK›]K›⁄[ô‘õŸ‹ô\‹ N¬àH[ŸHYà
-X›]ôT⁄⁄[àOOH	⁄€öY⁄	 H¬àò]“€öY⁄
-õÿñK›]K›⁄[ô‘õŸ‹ô\‹ N¬àH[ŸHYà
-X›]ôT⁄⁄[àOOH	‹õÿõ›	 H¬àò]‘õÿõ›
-õÿñK›]K›⁄[ô‘õŸ‹ô\‹ N¬àH[ŸH¬àò]”[Xô\öòX⁄ õÿñK›]K›⁄[ô‘õŸ‹ô\‹ N¬àBÇà›úô\›‹ôJ
-N¬üBÇãÀ»⁄⁄[àNà€\‹⁄X»[Xô\öòX⁄¬ôù[ò›[€àò]”[Xô\öòX⁄ õÿñK›]K›⁄[ô H¬à€€ú›\–⁄‹[ô»H›]HOOH	–“‘Së…Œ¬à€€ú›\õP[ô€HH\–⁄‹[ô»»SX]îH
-àåÕH
-à
-HH›⁄[ô H
-»X]îH
-àç
-à›⁄[ô»à¬ÇàÀ»⁄Y›¬à›ôö[›[HH	‹ôÿòJå IŒ¬à›òôY⁄[î]
-
-N¬à›ô[\ŸJçX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»Y‹»	àõ€›¬à›Àôö[›[HH	»ÃYLÿNIŒ»À»õYHôX[ú¬à›ôö[ôX›
-LMN
-»õÿñKLç
-N¬à›ôö[ôX›
-N
-»õÿñKLç
-N¬à›ôö[›[HH	»ÕLXL…Œ»À»õ€›¬à›ôö[ôX›
-LMãŒ
-»õÿñKML
-N¬à›ôö[ôX›
-Œ
-»õÿñKML
-N¬ÇàÀ»‹ú€»
-ôYZYõ[õô[⁄\ù
-Bà›ôö[›[HH	»ŸÃçåçâŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-LMãLM
-»õÿñKÃãÕäN¬à›ôö[
-
-N¬ÇàÀ»ZY]\õà[ô\¬à›ú›õ⁄ŸT›[HH	»ÃNNâ…Œ¬à›õ[ôU⁄YHé¬à›òôY⁄[î]
-
-N¬à›õ[›ôU LM
-»õÿñJN¬à›õ[ôU å
-»õÿñJN¬à›õ[›ôU LMãà
-»õÿñJN¬à›õ[ôU Mãà
-»õÿñJN¬à›ú›õ⁄ŸJ
-N¬ÇàÀ»XYà›ôö[›[HH	»ŸôYÿXIŒ»À»⁄⁄[à€ôBà›òôY⁄[î]
-
-N¬à›ò\ò Lçà
-»õÿñKMX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»^Y\¬à›ôö[›[HH	»ÃNNâ…Œ¬à›òôY⁄[î]
-
-N¬à›ò\ò ãLé
-»õÿñKãçKX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»ù\⁄Húõ›€àôX\ôà›Àôö[›[HH	»ÕŒÕLâŒ¬à›òôY⁄[î]
-
-N¬à›ò\ò Lå
-»õÿñKLKX]îJN¬à›ôö[
-
-N¬ÇàÀ»ôYôX[öYH]à›ôö[›[HH	»ŒNLXåXâŒ¬à›òôY⁄[î]
-
-N¬à›ò\ò LÃà
-»õÿñKMX]îKX]îH
-àäN¬à›ôö[
-
-N¬à›ôö[›[HH	»ÿéLXÃX…Œ¬à›ôö[ôX›
-LMLÕ
-»õÿñKéJN¬ÇàÀ»\õH	à^Bà›úÿ]ôJ
-N¬à›ùò[ú€]JãMà
-»õÿñJN¬à›úõ›]J\õP[ô€JN¬ÇàÀ»\õBà›ôö[›[HH	»ŸÃçåçâŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-MãåãL
-N¬à›ôö[
-
-N¬à›ôö[›[HH	»ŸôYÿXIŒ»À»[ôà›òôY⁄[î]
-
-N¬à›ò\ò åãLKKX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»^H[ôBà›ôö[›[HH	»ŒLçIŒ¬à›ôö[ôX›
-åLÕãã
-N¬ÇàÀ»›Y[^HXYà›ôö[›[HH	»ŒMLÿéIŒ¬à›òôY⁄[î]
-
-N¬à›õ[›ôU çãLÕ
-N¬à›õ[ôU M
-N¬à›õ[ôU LåäN¬à›õ[ôU çãLçäN¬à›ò€‹ŸT]
-
-N¬à›ôö[
-
-N¬ÇàÀ»⁄\úõYHY⁄Y⁄à›ú›õ⁄ŸT›[HH	»ŸéòYò…Œ¬à›õ[ôU⁄YHãçN¬à›òôY⁄[î]
-
-N¬à›õ[›ôU M
-N¬à›õ[ôU LåäN¬à›ú›õ⁄ŸJ
-N¬Çà›úô\›‹ôJ
-N¬üBÇãÀ»⁄⁄[àéà›⁄Yùö[öòBôù[ò›[€àò]”ö[öòJõÿñK›]K›⁄[ô H¬à€€ú›\–⁄‹[ô»H›]HOOH	–“‘Së…Œ¬à€€ú›\õP[ô€HH\–⁄‹[ô»»SX]îH
-àçH
-à
-HH›⁄[ô H
-»X]îH
-àçH
-à›⁄[ô»à¬ÇàÀ»⁄Y›¬à›Àôö[›[HH	‹ôÿòJå IŒ¬à›òôY⁄[î]
-
-N¬à›ô[\ŸJçX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»Y‹»	àXöHõ€›¬à›ôö[›[HH	»ÃåMÃòIŒ¬à›ôö[ôX›
-LLãN
-»õÿñKKç
-N¬à›ôö[ôX›
-ÀN
-»õÿñKKç
-N¬ÇàÀ»‹ú€»
-\ö»⁄[õÿöHÿ\òäBà›Àôö[›[HH	»ÃYLéLÿâŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-LMLM
-»õÿñKéÕäN¬à›ôö[
-
-N¬ÇàÀ»ôYÿ\⁄ô[à›ôö[›[HH	»ŸYç	Œ¬à›ôö[ôX›
-LM
-»õÿñKéäN¬ÇàÀ»XYX\⁄¬à›Àôö[›[HH	»ÃåMÃòIŒ¬à›òôY⁄[î]
-
-N¬à›ò\ò Lçà
-»õÿñKMX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»òXŸH€]	à^Y\¬à›ôö[›[HH	»ŸôYÿXIŒ¬à›ôö[ôX›
-LéH
-»õÿñKLãäN¬à›Àôö[›[HH	»ÃNNXâŒ¬à›òôY⁄[î]
-
-N¬à›ò\ò ãLçà
-»õÿñKãX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»ôYXYò[ô⁄]õÿ][ô»Z[¬à›ôö[›[HH	»ŸYç	Œ¬à›ôö[ôX›
-LMLÃ»
-»õÿñKéJN¬à›òôY⁄[î]
-
-N¬à›õ[›ôU LMLÃH
-»õÿñJN¬à›ú]XYò]X–›\ùôU LçãLÕà
-»X]ú⁄[ä^Y\ãöYU[YH
-àåJH
-àãLÕLé
-N¬à›õ[ôU LÃLå N¬à›ú]XYò]X–›\ùôU LåãLéLMLé
-»õÿñJN¬à›ôö[
-
-N¬ÇàÀ»\õH	àÿ][òH›€‹ôà›úÿ]ôJ
-N¬à›ùò[ú€]JãMà
-»õÿñJN¬à›úõ›]J\õP[ô€JN¬ÇàÀ»\õBà›Àôö[›[HH	»ÃYLéLÿâŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-MKåK
-N¬à›ôö[
-
-N¬ÇàÀ»ÿ][òH[à›Àôö[›[HH	»ŸYç	Œ¬à›ôö[ôX›
-åLNKåäN¬ÇàÀ»ÿ][òHõYH
-›Y[⁄]ﬁX[à[ô\ôﬁH€› Bà›ôö[›[HH	»ŸéòYò…Œ¬à›ú⁄Y›–€€‹àH	»ÃŒôé	Œ¬à›ú⁄Y›–õ\àHL¬à›òôY⁄[î]
-
-N¬à›õ[›ôU åãLN
-N¬à›õ[ôU çãMN
-N¬à›õ[ôU åãMåäN¬à›õ[ôU NKMN
-N¬à›ò€‹ŸT]
-
-N¬à›ôö[
-
-N¬à›ú⁄Y›–õ\àH¬Çà›úô\›‹ôJ
-N¬üBÇãÀ»⁄⁄[àŒàõﬁX[€öY⁄ôù[ò›[€àò]“€öY⁄
-õÿñK›]K›⁄[ô H¬à€€ú›\–⁄‹[ô»H›]HOOH	–“‘Së…Œ¬à€€ú›\õP[ô€HH\–⁄‹[ô»»SX]îH
-àåÕH
-à
-HH›⁄[ô H
-»X]îH
-àçH
-à›⁄[ô»à¬ÇàÀ»⁄Y›¬à›Àôö[›[HH	‹ôÿòJå IŒ¬à›òôY⁄[î]
-
-N¬à›ô[\ŸJçX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»›Y[‹ôX]ô\»»Y‹¬à›ôö[›[HH	»ÕçÕâŒ¬à›ôö[ôX›
-LLÀN
-»õÿñKLç
-N¬à›ôö[ôX›
-ÀN
-»õÿñKLç
-N¬ÇàÀ»⁄[ô\à]HúôX\›]H\õ[‹Çà›ôö[›[HH	»ŒMLÿé	Œ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-LMãLM
-»õÿñKÃãÕäN¬à›ôö[
-
-N¬ÇàÀ»€€ö[H[Xõ[Bà›ôö[›[HH	»Ÿòòôåç	Œ¬à›òôY⁄[î]
-
-N¬à›ò\ò à
-»õÿñKãX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»›Y[[Y]à›Àôö[›[HH	»ÕçÕâŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-LMM
-»õÿñKéçãäN¬à›ôö[
-
-N¬ÇàÀ»ö\€‹à€]à›ôö[›[HH	»ÃåMÃòIŒ¬à›ôö[ôX›
-LÃà
-»õÿñKLÀ
-N¬ÇàÀ»õYHôX]\à[YBà›Àôö[›[HH	»ÃÿéôçâŒ¬à›òôY⁄[î]
-
-N¬à›õ[›ôU M
-»õÿñJN¬à›ú]XYò]X–›\ùôU LMMNMMåäN¬à›ú]XYò]X–›\ùôU MMM
-»õÿñJN¬à›ôö[
-
-N¬ÇàÀ»\õH	àò]H^Bà›úÿ]ôJ
-N¬à›ùò[ú€]JãMà
-»õÿñJN¬à›úõ›]J\õP[ô€JN¬ÇàÀ»›Y[ÿ][ù]\õBà›ôö[›[HH	»ŒMLÿé	Œ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-MãåãL
-N¬à›ôö[
-
-N¬ÇàÀ»€ô»⁄Yùà›ôö[›[HH	»ÕŒÕLâŒ¬à›ôö[ôX›
-åMããLäN¬ÇàÀ»›XõKRXYYX]ûHò]H^Bà›Àôö[›[HH	»ÿÿôYLIŒ¬à›òôY⁄[î]
-
-N¬àÀ»úõ€ùõYBà›õ[›ôU çãLŒ
-N¬à›õ[ôU ãMäN¬à›õ[ôU ãLå
-N¬à›õ[ôU çãLé
-N¬àÀ»òX⁄»õYBà›õ[›ôU åLÕäN¬à›õ[ôU ãMäN¬à›õ[ôU ãLåäN¬à›õ[ôU åLé
-N¬à›ôö[
-
-N¬Çà›úô\›‹ôJ
-N¬üBÇãÀ»⁄⁄[ààﬁXô\àõÿõ›ôù[ò›[€àò]‘õÿõ›
-õÿñK›]K›⁄[ô H¬à€€ú›\–⁄‹[ô»H›]HOOH	–“‘Së…Œ¬à€€ú›\õP[ô€HH\–⁄‹[ô»»SX]îH
-àç
-à
-HH›⁄[ô H
-»X]îH
-àçH
-à›⁄[ô»à¬ÇàÀ»⁄Y›¬à›ôö[›[HH	‹ôÿòJå IŒ¬à›òôY⁄[î]
-
-N¬à›ô[\ŸJçX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»ﬁXô\à[Xú¬à›Àôö[›[HH	»ÃÃÕMMIŒ¬à›ôö[ôX›
-LLãN
-»õÿñKKç
-N¬à›ôö[ôX›
-ÀN
-»õÿñKKç
-N¬ÇàÀ»‹ú€¬à›Àôö[›[HH	»ÕÕMMéIŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-LMKLM
-»õÿñKÃÕäN¬à›ôö[
-
-N¬ÇàÀ»[ô\ôﬁH€‹ôH
-[⁄[ô»ﬁX[äBà›ôö[›[HH	»Ãòçô	Œ¬à›ú⁄Y›–€€‹àH	»ÃåôŸYIŒ¬à›ú⁄Y›–õ\àH¬à›òôY⁄[î]
-
-N¬à›ò\ò à
-»õÿñKKX]îH
-àäN¬à›ôö[
-
-N¬à›ú⁄Y›–õ\àH¬ÇàÀ»XYà›ôö[›[HH	»ÃÃÕMMIŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-LLÀLŒ
-»õÿñKçãç
-N¬à›ôö[
-
-N¬ÇàÀ»€›⁄[ô»ô[€àö\€‹Çà›ôö[›[HH	»Ãòçô	Œ¬à›ú⁄Y›–€€‹àH	»ÃŒôé	Œ¬à›ú⁄Y›–õ\àHL¬à›ôö[ôX›
-LÃà
-»õÿñKLÀäN¬à›ú⁄Y›–õ\àH¬ÇàÀ»[ù[õòBà›ôö[›[HH	»ÕçÕâŒ¬à›ôö[ôX›
-LãM
-»õÿñKäN¬à›Àôö[›[HH	»ŸçŸçYIŒ¬à›òôY⁄[î]
-
-N¬à›ò\ò Mà
-»õÿñKÀX]îH
-àäN¬à›ôö[
-
-N¬ÇàÀ»\õH	à\Ÿ\à^Bà›úÿ]ôJ
-N¬à›ùò[ú€]JãMà
-»õÿñJN¬à›úõ›]J\õP[ô€JN¬Çà›ôö[›[HH	»ÕÕMMéIŒ¬à›òôY⁄[î]
-
-N¬à›úõ›[ôôX›
-MKåK
-N¬à›ôö[
-
-N¬ÇàÀ»\Ÿ\à^H[ôBà›Àôö[›[HH	»ÃåMÃòIŒ¬à›ôö[ôX›
-åLÕKäN¬ÇàÀ»\Ÿ\à[ô\ôﬁHõYH
-úöY⁄€›⁄[ô»ô[€äBà›Àôö[›[HH	»ÃåôŸYIŒ¬à›ú⁄Y›–€€‹àH	»Ãòçô	Œ¬à›ú⁄Y›–õ\àHM¬à›òôY⁄[î]
-
-N¬à›õ[›ôU çKLÕ
-N¬à›õ[ôU KMäN¬à›õ[ôU ãLN
-N¬à›õ[ôU çKLç
-N¬à›ò€‹ŸT]
-
-N¬à›ôö[
-
-N¬à›ú⁄Y›–õ\àH¬Çà›úô\›‹ôJ
-N¬üB// --- Core Game Systems & Loop ---
-
-// Rank & Medal Calculation
-function calculateRank(s) {
-  if (s >= 200) return 'üëë Th√°nh B·ªï C·ªßi V√¥ ƒê·ªãch';
-  if (s >= 100) return '‚ö° Cao Th·ªß Ch√©m C·ªßi';
-  if (s >= 50) return 'üç≤ Th·ª£ R·ª´ng Chuy√™n Nghi·ªáp';
-  if (s >= 20) return '™• Ti√™u Phu Nhanh Nh·∫∑n';
-  return 'ü©π T·∫≠p S·ª± B·ªî C·ª¶i';
+function drawTrunkSegment(cx, cy, branchType) {
+  const halfW = TRUNK_WIDTH / 2;
+  const h = TRUNK_HEIGHT;
+
+  if (branchType === BRANCH.LEFT) {
+    drawBranch(cx - halfW, cy + h * 0.5, 'LEFT');
+  } else if (branchType === BRANCH.RIGHT) {
+    drawBranch(cx + halfW, cy + h * 0.5, 'RIGHT');
+  }
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  const logGrad = ctx.createLinearGradient(-halfW, 0, halfW, 0);
+  logGrad.addColorStop(0, '#5b2609');
+  logGrad.addColorStop(0.18, '#854d0e');
+  logGrad.addColorStop(0.5, '#a16207');
+  logGrad.addColorStop(0.82, '#854d0e');
+  logGrad.addColorStop(1, '#5b2609');
+
+  ctx.fillStyle = logGrad;
+  ctx.beginPath();
+  ctx.roundRect(-halfW, 0, TRUNK_WIDTH, h, 4);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(69, 26, 3, 0.45)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-halfW * 0.5, 4);
+  ctx.lineTo(-halfW * 0.55, h - 4);
+  ctx.moveTo(halfW * 0.35, 4);
+  ctx.lineTo(halfW * 0.3, h - 4);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(254, 240, 138, 0.35)';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, halfW - 2, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
 }
 
-// Generate the Next Random Trunk Segment
-let lastBranch = BRANCH.NONE;
-function generateNextBranch() {
-  const rand = Math.random();
-  if (lastBranch === BRANCH.NONE) {
-    if (rand < 0.42) {
-      lastBranch = BRANCH.LEFT;
-    } else if (rand < 0.84) {
-      lastBranch = BRANCH.RIGHT;
-    } else {
-      lastBranch = BRANCH.NONE;
-    }
+// Draw a Branch with Lush Foliage
+function drawBranch(startX, startY, side) {
+  ctx.save();
+  const dir = side === 'LEFT' ? -1 : 1;
+  const branchLen = 92;
+
+  ctx.fillStyle = '#78350f';
+  ctx.beginPath();
+  ctx.moveTo(startX, startY - 12);
+  ctx.quadraticCurveTo(startX + dir * (branchLen * 0.5), startY - 18, startX + dir * branchLen, startY - 10);
+  ctx.lineTo(startX + dir * branchLen, startY + 8);
+  ctx.quadraticCurveTo(startX + dir * (branchLen * 0.5), startY + 12, startX, startY + 12);
+  ctx.closePath();
+  ctx.fill();
+
+  const tipX = startX + dir * (branchLen * 0.95);
+  const tipY = startY - 2;
+  const leafColors = ['#14532d', '#166534', '#15803d', '#22c55e'];
+  
+  [
+    { ox: 0, oy: -8, r: 24, c: leafColors[1] },
+    { ox: dir * 18, oy: 2, r: 20, c: leafColors[2] },
+    { ox: -dir * 16, oy: -14, r: 18, c: leafColors[3] }
+  ].forEach(p => {
+    ctx.fillStyle = p.c;
+    ctx.beginPath();
+    ctx.arc(tipX + p.ox, tipY + p.oy, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.restore();
+}
+
+// Draw Player Character according to Selected Skin
+function drawPlayer(x, y, side, state, swingProgress) {
+  ctx.save();
+  ctx.translate(x, y);
+  
+  if (side === 'RIGHT') {
+    ctx.scale(-1, 1);
+  }
+
+  let bobY = 0;
+  if (state === 'IDLE') {
+    bobY = Math.sin(player.idleTime * 0.08) * 2.5;
+  }
+
+  if (activeSkin === 'ninja') {
+    drawNinja(bobY, state, swingProgress);
+  } else if (activeSkin === 'knight') {
+    drawKnight(bobY, state, swingProgress);
+  } else if (activeSkin === 'robot') {
+    drawRobot(bobY, state, swingProgress);
   } else {
-    // If previous was a branch, 50% chance of empty for fair reaction time
-    if (rand < 0.5) {
-      lastBranch = BRANCH.NONE;
-    } else {
-      lastBranch = Math.random() < 0.5 ? BRANCH.LEFT : BRANCH.RIGHT;
-    }
+    drawLumberjack(bobY, state, swingProgress);
   }
-  return lastBranch;
+
+  ctx.restore();
 }
 
-function initTree() {
-  treeSegments = [];
-  lastBranch = BRANCH.NONE;
-  // First 4 segments are empty for safe starting
-  for (let i = 0; i < 4; i++) {
-    treeSegments.push(BRANCH.NONE);
-  }
-  // Remaining segments have branches
-  for (let i = 4; i < TOTAL_SEGMENTS; i++) {
-    treeSegments.push(generateNextBranch());
-  }
+function drawLumberjack(bobY, state, swing) {
+  const isChopping = state === 'CHOPPING';
+  const armAngle = isChopping ? -Math.PI * 0.35 * (1 - swing) + Math.PI * 0.4 * swing : 0;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 48, 24, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#1e3a8a';
+  ctx.fillRect(-14, 18 + bobY, 10, 24);
+  ctx.fillRect(4, 18 + bobY, 10, 24);
+  ctx.fillStyle = '#451a03';
+  ctx.fillRect(-16, 38 + bobY, 14, 10);
+  ctx.fillRect(4, 38 + bobY, 14, 10);
+
+  ctx.fillStyle = '#dc2626';
+  ctx.beginPath();
+  ctx.roundRect(-16, -14 + bobY, 32, 34, 6);
+  ctx.fill();
+
+  ctx.strokeStyle = '#18181b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -14 + bobY);
+  ctx.lineTo(0, 20 + bobY);
+  ctx.moveTo(-16, 2 + bobY);
+  ctx.lineTo(16, 2 + bobY);
+  ctx.stroke();
+
+  ctx.fillStyle = '#fed7aa';
+  ctx.beginPath();
+  ctx.arc(0, -26 + bobY, 14, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#18181b';
+  ctx.beginPath();
+  ctx.arc(6, -28 + bobY, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#78350f';
+  ctx.beginPath();
+  ctx.arc(4, -20 + bobY, 11, 0, Math.PI);
+  ctx.fill();
+
+  ctx.fillStyle = '#991b1b';
+  ctx.beginPath();
+  ctx.arc(0, -32 + bobY, 14, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#b91c1c';
+  ctx.fillRect(-14, -34 + bobY, 28, 5);
+
+  ctx.save();
+  ctx.translate(6, -6 + bobY);
+  ctx.rotate(armAngle);
+
+  ctx.fillStyle = '#dc2626';
+  ctx.beginPath();
+  ctx.roundRect(0, -6, 22, 10, 4);
+  ctx.fill();
+  ctx.fillStyle = '#fed7aa';
+  ctx.beginPath();
+  ctx.arc(22, -1, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#92400e';
+  ctx.fillRect(20, -36, 6, 44);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.beginPath();
+  ctx.moveTo(26, -34);
+  ctx.lineTo(44, -40);
+  ctx.lineTo(44, -22);
+  ctx.lineTo(26, -26);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#f8fafc';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(44, -40);
+  ctx.lineTo(44, -22);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
-// Particle System Classes
-class FlyingLog {
-  constructor(x, y, side) {
-    this.x = x;
-    this.y = y;
-    this.vx = side === 'LEFT' ? -12 - Math.random() * 5 : 12 + Math.random() * 5;
-    this.vy = -10 - Math.random() * 4;
-    this.rotation = 0;
-    this.rotationSpeed = (side === 'LEFT' ? -1 : 1) * (0.2 + Math.random() * 0.15);
-    this.gravity = 0.7;
-    this.opacity = 1;
-    this.life = 0;
-  }
-  update() {
-    this.x += this.vx;
-    this.y += this.vy;
-    this.vy += this.gravity;
-    this.rotation += this.rotationSpeed;
-    this.life++;
-    if (this.life > 40) {
-      this.opacity -= 0.05;
-    }
-  }
-  draw() {
-    ctx.save();
-    ctx.globalOpa1city = Math.max(0, this.opacity);
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.rotation);
-    drawTrunkSegment(0, -TRUNK_HEIGHT / 2, BRANCH.NONE);
-    ctx.restore();
-  }
+function drawNinja(bobY, state, swing) {
+  const isChopping = state === 'CHOPPING';
+  const armAngle = isChopping ? -Math.PI * 0.45 * (1 - swing) + Math.PI * 0.5 * swing : 0;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 48, 24, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(-12, 18 + bobY, 9, 24);
+  ctx.fillRect(3, 18 + bobY, 9, 24);
+
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.roundRect(-14, -14 + bobY, 28, 34, 6);
+  ctx.fill();
+
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(-14, 8 + bobY, 28, 6);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.beginPath();
+  ctx.arc(0, -26 + bobY, 14, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#fed7aa';
+  ctx.fillRect(0, -29 + bobY, 12, 6);
+  ctx.fillStyle = '#18181b';
+  ctx.beginPath();
+  ctx.arc(6, -26 + bobY, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(-14, -33 + bobY, 28, 5);
+  ctx.beginPath();
+  ctx.moveTo(-14, -31 + bobY);
+  ctx.quadraticCurveTo(-26, -36 + Math.sin(player.idleTime * 0.1) * 6, -34, -28);
+  ctx.lineTo(-30, -23);
+  ctx.quadraticCurveTo(-22, -28, -14, -28 + bobY);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(6, -6 + bobY);
+  ctx.rotate(armAngle);
+
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.roundRect(0, -5, 20, 9, 4);
+  ctx.fill();
+
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(20, -18, 5, 22);
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.shadowColor = '#38bdf8';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.moveTo(22, -18);
+  ctx.lineTo(26, -58);
+  ctx.lineTo(22, -62);
+  ctx.lineTo(19, -58);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.restore();
 }
 
-class WoodChip {
-  constructor(x, y, side) {
-    this.x = x;
-    this.y = y;
-    const angle = side === 'LEFT' ? Math.PI * 0.75 + (Math.random() - 0.5) : Math.PI * 0.25 + (Math.random() - 0.5);
-    const speed = 4 + Math.random() * 10;
-    this.vx = Math.cos(angle) * speed;
-    this.vy = -Math.sin(angle) * speed - 2;
-    this.size = 3 + Math.random() * 5;
-    this.color = ['#854d0e', '#a16207', '#ca8a04', '#fed7aa'][Math.floor(Math.random() * 4)];
-    this.gravity = 0.5;
-    this.life = 0;
-    this.maxLife = 25 + Math.random() * 15;
-  }
-  update() {
-    this.x += this.vx;
-    this.y += this.vy;
-    this.vy += this.gravity;
-    this.life++;
-  }
-  draw() {
-    const alpha = 1 - this.life / this.maxLife;
-    ctx.save();
-    ctw.globalAlpha = Math.max(0, alpha);
-    ctw.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, this.size, this.size);
-    ctx.restore();
-  }
+function drawKnight(bobY, state, swing) {
+  const isChopping = state === 'CHOPPING';
+  const armAngle = isChopping ? -Math.PI * 0.35 * (1 - swing) + Math.PI * 0.45 * swing : 0;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 48, 24, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(-13, 18 + bobY, 10, 24);
+  ctx.fillRect(3, 18 + bobY, 10, 24);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.beginPath();
+  ctx.roundRect(-16, -14 + bobY, 32, 34, 6);
+  ctx.fill();
+
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath();
+  ctx.arc(0, 2 + bobY, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#64748b';
+  ctx.beginPath();
+  ctx.roundRect(-14, -40 + bobY, 28, 26, 6);
+  ctx.fill();
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, -32 + bobY, 13, 4);
+
+  ctx.fillStyle = '#3b82f6';
+  ctx.beginPath();
+  ctx.moveTo(0, -40 + bobY);
+  ctx.quadraticCurveTo(-14, -58, -4, -62);
+  ctx.quadraticCurveTo(8, -54, 4, -40 + bobY);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(6, -6 + bobY);
+  ctx.rotate(armAngle);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.beginPath();
+  ctx.roundRect(0, -6, 22, 10, 4);
+  ctx.fill();
+
+  ctx.fillStyle = '#78350f';
+  ctx.fillRect(20, -42, 6, 52);
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.beginPath();
+  ctx.moveTo(26, -38);
+  ctx.lineTo(46, -46);
+  ctx.lineTo(46, -20);
+  ctx.lineTo(26, -28);
+  ctx.moveTo(20, -36);
+  ctx.lineTo(6, -42);
+  ctx.lineTo(6, -22);
+  ctx.lineTo(20, -28);
+  ctx.fill();
+
+  ctx.restore();
 }
 
-class SlashArc {
-  constructor(x, y, side) {
-    this.x = x;
-    this.y = y;
-    this.side = side;
-    this.life = 0;
-    this.maxLife = 10;
-  }
-  update() {
-    this.life++;
-  }
-  draw() {
-    const progress = this.life / this.maxLife;
-    ctx.save();
-    ctx.globalAlpha = 1 - progress;
-    ctx.strokeStyle = activeSkin === 'ninja' ? '#38bdf8' : (activeSkin === 'robot' ? '#06b6d4' : '#ffffff');
-    ctx.lineWidth = 4 * (1 - progress);
-    ctx.shadowColor = ctx.strokeStyle;
-    ctx.shadowBlur = 8;
-    ctw.beginPath();
-    const dir = this.side === 'LEFT' ? 1 : -1;
-    ctx.arc(this.x, this.y, 45, -Math.PI * 0.3 * dir, Math.PI * 0.4 * dir);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
+function drawRobot(bobY, state, swing) {
+  const isChopping = state === 'CHOPPING';
+  const armAngle = isChopping ? -Math.PI * 0.4 * (1 - swing) + Math.PI * 0.45 * swing : 0;
 
-class FloatingText {
-  constructor(text, x, y, color = '#fbbf24', fontSize = 24) {
-    this.text = text;
-    this.x = x;
-    this.y = y;
-    this.color = color;
-    this.fontSize = fontSize;
-    this.life = 0;
-    this.maxLife = 30;
-  }
-  update() {
-    this.y -= 1.4;
-    this.life++;
-  }
-  draw() {
-    const progress = this.life / this.maxLife;
-    ctx.save();
-    ctw.globalAlpha = 1 - progress;
-    ctw.font = `800 ${this.fontSize}px var(--font-main)`;
-    ctx.fillStyle = this.color;
-    ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = 6;
-    ctx.fillText(this.text, this.x, this.y);
-    ctx.restore();
-  }
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 48, 24, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(-12, 18 + bobY, 9, 24);
+  ctx.fillRect(3, 18 + bobY, 9, 24);
+
+  ctx.fillStyle = '#475569';
+  ctx.beginPath();
+  ctx.roundRect(-15, -14 + bobY, 30, 34, 6);
+  ctx.fill();
+
+  ctx.fillStyle = '#06b6d4';
+  ctx.shadowColor = '#22d3ee';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.arc(0, 2 + bobY, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#334155';
+  ctx.beginPath();
+  ctx.roundRect(-13, -38 + bobY, 26, 24, 4);
+  ctx.fill();
+
+  ctx.fillStyle = '#06b6d4';
+  ctx.shadowColor = '#38bdf8';
+  ctx.shadowBlur = 10;
+  ctx.fillRect(0, -32 + bobY, 13, 6);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#64748b';
+  ctx.fillRect(-2, -44 + bobY, 4, 6);
+  ctx.fillStyle = '#f43f5e';
+  ctx.beginPath();
+  ctx.arc(0, -46 + bobY, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(6, -6 + bobY);
+  ctx.rotate(armAngle);
+
+  ctx.fillStyle = '#475569';
+  ctx.beginPath();
+  ctx.roundRect(0, -5, 20, 9, 4);
+  ctx.fill();
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(20, -34, 5, 42);
+
+  ctx.fillStyle = '#22d3ee';
+  ctx.shadowColor = '#06b6d4';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.moveTo(25, -34);
+  ctx.lineTo(45, -42);
+  ctx.lineTo(42, -18);
+  ctx.lineTo(25, -24);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.restore();
 }
 
 // Start Game from Menu
@@ -841,6 +861,7 @@ function startGame() {
 function updateHUD() {
   currentScoreEl.textContent = score;
   timeBar.style.width = `${Math.max(0, Math.min(100, timeLeft))}%`;
+
   timeBar.classList.remove('warning', 'danger');
   if (timeLeft < 25) {
     timeBar.classList.add('danger');
@@ -890,7 +911,7 @@ function chop(side) {
   const logY = trunkBaseY;
   flyingLogs.push(new FlyingLog(logX, logY, side));
 
-  const chopImpactX = side === 'LEFT' ? trunkBaseX - TRUNK_WIDTH< * 0.4 : trunkBaseX + TRUNK_WIDTH * 0.4;
+  const chopImpactX = side === 'LEFT' ? trunkBaseX - TRUNK_WIDTH * 0.4 : trunkBaseX + TRUNK_WIDTH * 0.4;
   const chopImpactY = trunkBaseY + TRUNK_HEIGHT * 0.5;
 
   for (let i = 0; i < 14; i++) {
@@ -1058,7 +1079,6 @@ window.addEventListener('keydown', (e) => {
 let lastFrameTime = performance.now();
 
 function update(dt) {
-  // Update Player Idle / Chop animation
   player.idleTime += dt * 60;
   if (player.state === 'CHOPPING') {
     player.chopProgress += dt * 10;
@@ -1068,7 +1088,6 @@ function update(dt) {
     }
   }
 
-  // Update Environment Leaves & Clouds
   clouds.forEach(c => {
     c.x += c.speed * dt * 60;
     if (c.x > viewWidth + 60) c.x = -60;
@@ -1084,12 +1103,10 @@ function update(dt) {
     }
   });
 
-  // Screen Shake Decay
   if (shakeIntensity > 0) {
     shakeIntensity = Math.max(0, shakeIntensity - dt * 25);
   }
 
-  // Particles
   for (let i = flyingLogs.length - 1; i >= 0; i--) {
     flyingLogs[i].update();
     if (flyingLogs[i].opacity <= 0 || flyingLogs[i].y > viewHeight + 100) {
@@ -1118,7 +1135,6 @@ function update(dt) {
     }
   }
 
-  // Time drain in PLAYING state
   if (gameState === STATE.PLAYING) {
     const drainSpeed = 0.55 + Math.min(score * 0.0035, 1.2);
     timeLeft -= drainSpeed * dt * 60;
@@ -1135,33 +1151,27 @@ function update(dt) {
 function render() {
   ctx.save();
 
-  // Apply Screen Shake
   if (shakeIntensity > 0) {
     const offsetX = (Math.random() - 0.5) * shakeIntensity;
     const offsetY = (Math.random() - 0.5) * shakeIntensity;
     ctx.translate(offsetX, offsetY);
   }
 
-  // 1. Background
   drawBackground();
 
-  // 2. Tree Trunk Stack
   for (let i = 0; i < treeSegments.length; i++) {
     const segY = trunkBaseY - i * TRUNK_HEIGHT;
     drawTrunkSegment(trunkBaseX, segY, treeSegments[i]);
   }
 
-  // 3. Flying Logs
   flyingLogs.forEach(log => log.draw());
 
-  // 4. Player Character
-  const playerOffset = TRUNK_WIDTH< * 0.5 + 46;
+  const playerOffset = TRUNK_WIDTH * 0.5 + 46;
   const playerX = player.side === 'LEFT' ? trunkBaseX - playerOffset : trunkBaseX + playerOffset;
   const playerY = trunkBaseY + TRUNK_HEIGHT - 38;
 
   drawPlayer(playerX, playerY, player.side, player.state, player.chopProgress);
 
-  // 5. Slash Arcs & Wood Chips & Floating Texts
   slashArcs.forEach(arc => arc.draw());
   woodChips.forEach(chip => chip.draw());
   floatingTexts.forEach(txt => txt.draw());
